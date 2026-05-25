@@ -1,18 +1,27 @@
 package config
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/zalando/go-keyring"
 )
 
 const keyringServiceName = "matcha-email-client"
+
+const (
+	ProviderGmail  = "gmail"
+	ProviderICloud = "icloud"
+	ProviderCustom = "custom"
+)
 
 // Date format presets use human-readable tokens. Supported tokens:
 //
@@ -28,6 +37,11 @@ const (
 	DateFormatUS  = "MM/DD/YYYY hh:MM AM"
 	DateFormatEU  = "DD/MM/YYYY HH:MM"
 )
+
+type SessionCache struct {
+	once  sync.Once
+	cache tls.ClientSessionCache
+}
 
 // Account stores the configuration for a single email account.
 type Account struct {
@@ -45,6 +59,8 @@ type Account struct {
 	// CatchAll skips per-address filtering so all inbox messages are shown,
 	// regardless of which address they were delivered to.
 	CatchAll bool `json:"catch_all,omitempty"`
+
+	SC *SessionCache `json:"-"` // "-" prevents the SessionCache from being saved to config.json
 
 	// Custom server settings (used when ServiceProvider is "custom")
 	IMAPServer string `json:"imap_server,omitempty"`
@@ -185,13 +201,13 @@ func translateDateFormat(f string) string {
 // GetIMAPServer returns the IMAP server address for the account.
 func (a *Account) GetIMAPServer() string {
 	switch a.ServiceProvider {
-	case "gmail":
+	case ProviderGmail:
 		return "imap.gmail.com"
 	case "outlook":
 		return "outlook.office365.com"
-	case "icloud":
+	case ProviderICloud:
 		return "imap.mail.me.com"
-	case "custom":
+	case ProviderCustom:
 		return a.IMAPServer
 	default:
 		return ""
@@ -201,9 +217,9 @@ func (a *Account) GetIMAPServer() string {
 // GetIMAPPort returns the IMAP port for the account.
 func (a *Account) GetIMAPPort() int {
 	switch a.ServiceProvider {
-	case "gmail", "outlook", "icloud":
+	case ProviderGmail, "outlook", "icloud":
 		return 993
-	case "custom":
+	case ProviderCustom:
 		if a.IMAPPort != 0 {
 			return a.IMAPPort
 		}
@@ -216,25 +232,33 @@ func (a *Account) GetIMAPPort() int {
 // GetSMTPServer returns the SMTP server address for the account.
 func (a *Account) GetSMTPServer() string {
 	switch a.ServiceProvider {
-	case "gmail":
+	case ProviderGmail:
 		return "smtp.gmail.com"
 	case "outlook":
 		return "smtp.office365.com"
-	case "icloud":
+	case ProviderICloud:
 		return "smtp.mail.me.com"
-	case "custom":
+	case ProviderCustom:
 		return a.SMTPServer
 	default:
 		return ""
 	}
 }
 
+func (a *Account) GetClientSessionCache() tls.ClientSessionCache {
+	a.SC.once.Do(func() {
+		a.SC.cache = tls.NewLRUClientSessionCache(64)
+	})
+
+	return a.SC.cache
+}
+
 // GetSMTPPort returns the SMTP port for the account.
 func (a *Account) GetSMTPPort() int {
 	switch a.ServiceProvider {
-	case "gmail", "outlook", "icloud":
+	case ProviderGmail, "outlook", "icloud":
 		return 587
-	case "custom":
+	case ProviderCustom:
 		if a.SMTPPort != 0 {
 			return a.SMTPPort
 		}
@@ -580,6 +604,7 @@ func LoadConfig() (*Config, error) {
 						Password:        legacyConfig.Password,
 						ServiceProvider: legacyConfig.ServiceProvider,
 						FetchEmail:      legacyConfig.Email,
+						SC:              &SessionCache{},
 					},
 				},
 			}
@@ -631,6 +656,7 @@ func LoadConfig() (*Config, error) {
 			POP3Server:         rawAcc.POP3Server,
 			POP3Port:           rawAcc.POP3Port,
 			CatchAll:           rawAcc.CatchAll,
+			SC:                 &SessionCache{},
 		}
 
 		// Validate PGPKeySource
@@ -638,18 +664,19 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("account %q: invalid pgp_key_source %q (must be \"file\" or \"yubikey\")", acc.Name, acc.PGPKeySource)
 		}
 
-		if secureMode {
+		switch {
+		case secureMode:
 			// In secure mode, passwords and PINs are stored in the encrypted config JSON
 			acc.Password = rawAcc.Password
 			acc.PGPPIN = rawAcc.PGPPIN
-		} else if rawAcc.Password != "" {
+		case rawAcc.Password != "":
 			// Found a plain-text password! Move it to the OS Keyring.
 			if err := keyring.Set(keyringServiceName, rawAcc.Email, rawAcc.Password); err != nil {
 				log.Printf("matcha: failed to migrate password for %s into keyring: %v", rawAcc.Email, err)
 			}
 			acc.Password = rawAcc.Password
 			needsMigration = true
-		} else {
+		default:
 			// No plaintext password in JSON, fetch from Keyring as normal.
 			if pwd, err := keyring.Get(keyringServiceName, acc.Email); err == nil {
 				acc.Password = pwd
@@ -705,11 +732,11 @@ func (c *Config) RemoveAccount(id string) bool {
 			// missing entry is expected and not worth logging (keyring.Get is
 			// what we rely on elsewhere to detect that), but any other error
 			// means we failed to clean up a still-reachable secret.
-			if err := keyring.Delete(keyringServiceName, acc.Email); err != nil && err != keyring.ErrNotFound {
+			if err := keyring.Delete(keyringServiceName, acc.Email); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 				log.Printf("matcha: failed to delete password for %s from keyring: %v", acc.Email, err)
 			}
 			// Delete PGP PIN from OS Keyring if present
-			if err := keyring.Delete(keyringServiceName, acc.Email+":pgp-pin"); err != nil && err != keyring.ErrNotFound {
+			if err := keyring.Delete(keyringServiceName, acc.Email+":pgp-pin"); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 				log.Printf("matcha: failed to delete PGP PIN for %s from keyring: %v", acc.Email, err)
 			}
 

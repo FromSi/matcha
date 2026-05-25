@@ -1,8 +1,6 @@
 module github.com/floatpane/matcha
 
-go 1.26.2
-
-toolchain go1.26.3
+go 1.26.3
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -14,6 +12,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/arran4/golang-ical v0.3.5
+	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/emersion/go-maildir v0.6.0
@@ -30,8 +29,8 @@ require (
 	github.com/yuin/gopher-lua v1.1.2
 	github.com/zalando/go-keyring v0.2.8
 	go.mozilla.org/pkcs7 v0.9.0
-	golang.org/x/crypto v0.51.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
 	golang.org/x/text v0.37.0
 )
@@ -42,16 +41,14 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260416155717-489999b90468 // indirect
-	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/cloudflare/circl v1.6.2 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
@@ -60,9 +57,7 @@ require (
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/oauth2 v0.4.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
 )
